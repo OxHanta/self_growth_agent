@@ -48,7 +48,7 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
 
   if (groq) {
     try {
-      return await tryClient(groq, 'llama3-70b-8192', messages, 'Groq');
+      return await tryClient(groq, 'llama-3.3-70b-versatile', messages, 'Groq');
     } catch (e) {
       errors.push(`Groq: ${(e as Error).message}`);
     }
@@ -56,7 +56,7 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
 
   if (openrouter) {
     try {
-      return await tryClient(openrouter, 'mistralai/mistral-7b-instruct:free', messages, 'OpenRouter');
+      return await tryClient(openrouter, 'google/gemini-2.0-flash-lite-preview-02-05:free', messages, 'OpenRouter');
     } catch (e) {
       errors.push(`OpenRouter: ${(e as Error).message}`);
     }
