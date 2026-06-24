@@ -1,0 +1,81 @@
+import {
+  pgTable,
+  serial,
+  text,
+  boolean,
+  integer,
+  timestamp,
+  varchar,
+  date,
+} from 'drizzle-orm/pg-core';
+
+// ── Habits ────────────────────────────────────────────────────────────────────
+export const habits = pgTable('habits', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  category: varchar('category', { length: 20 }).notNull().default('other'), // financial | health | other
+  targetFrequency: varchar('target_frequency', { length: 20 }).notNull().default('daily'),
+  streak: integer('streak').notNull().default(0),
+  lastCompleted: date('last_completed'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ── Habit Logs ─────────────────────────────────────────────────────────────────
+export const habitLogs = pgTable('habit_logs', {
+  id: serial('id').primaryKey(),
+  habitId: integer('habit_id').notNull().references(() => habits.id),
+  date: date('date').notNull(),
+  completed: boolean('completed').notNull().default(true),
+  note: text('note'),
+  loggedAt: timestamp('logged_at').defaultNow().notNull(),
+});
+
+// ── Tasks (procrastination tracking) ─────────────────────────────────────────
+export const tasks = pgTable('tasks', {
+  id: serial('id').primaryKey(),
+  description: text('description').notNull(),
+  deadline: timestamp('deadline'),
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | done | cancelled
+  timesDeferred: integer('times_deferred').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ── Decisions (advisory log) ───────────────────────────────────────────────────
+export const decisions = pgTable('decisions', {
+  id: serial('id').primaryKey(),
+  category: varchar('category', { length: 30 }).notNull().default('general'), // business | investment | life | general
+  question: text('question').notNull(),
+  contextGiven: text('context_given'),
+  adviceGiven: text('advice_given'),
+  outcome: text('outcome'), // filled in later
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ── Reminders ─────────────────────────────────────────────────────────────────
+export const reminders = pgTable('reminders', {
+  id: serial('id').primaryKey(),
+  text: text('text').notNull(),
+  scheduledTime: timestamp('scheduled_time').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | sent | cancelled
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ── Mental Exercises Sent ─────────────────────────────────────────────────────
+export const mentalExercisesSent = pgTable('mental_exercises_sent', {
+  id: serial('id').primaryKey(),
+  exerciseType: varchar('exercise_type', { length: 20 }).notNull(), // cognitive | reflective
+  contentSummary: text('content_summary').notNull(),
+  fullContent: text('full_content').notNull(),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
+});
+
+// ── Sheet Config ──────────────────────────────────────────────────────────────
+export const sheetConfig = pgTable('sheet_config', {
+  id: serial('id').primaryKey(),
+  friendlyName: varchar('friendly_name', { length: 50 }).notNull(),
+  sheetId: varchar('sheet_id', { length: 100 }).notNull(),
+  tabName: varchar('tab_name', { length: 50 }).notNull(),
+  purpose: varchar('purpose', { length: 20 }).notNull().default('both'), // read | write | both
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
