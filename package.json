@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
+    "drizzle-kit": "^0.21.4",
     "drizzle-orm": "^0.30.10",
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
@@ -26,7 +27,6 @@
     "@types/node-cron": "^3.0.11",
     "@types/node-telegram-bot-api": "^0.64.7",
     "@types/pg": "^8.11.6",
-    "drizzle-kit": "^0.21.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
   }
