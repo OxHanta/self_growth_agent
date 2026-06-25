@@ -179,9 +179,9 @@ export function createBot(): TelegramBot {
       // Send reply
       await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Brain error:', err);
-      await bot.sendMessage(msg.chat.id, 'Something broke on my end. Try again.');
+      await bot.sendMessage(msg.chat.id, `Something broke on my end. Try again.\n\nError details:\n\`\`\`\n${err?.message || err}\n\`\`\``, { parse_mode: 'Markdown' });
     }
   });
 
