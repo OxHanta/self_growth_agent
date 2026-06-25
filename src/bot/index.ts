@@ -181,7 +181,18 @@ export function createBot(): TelegramBot {
 
     } catch (err: any) {
       console.error('Brain error:', err);
-      await bot.sendMessage(msg.chat.id, `Something broke on my end. Try again.\n\nError details:\n\`\`\`\n${err?.message || err}\n\`\`\``, { parse_mode: 'Markdown' });
+      let errMsg = err?.message || String(err);
+      if (err && typeof err === 'object' && 'errors' in err && Array.isArray(err.errors)) {
+        errMsg += '\n' + err.errors.map((e: any) => e?.message || String(e)).join('\n');
+      }
+      if (err?.cause) {
+        const cause = err.cause;
+        errMsg += `\nCause: ${cause.message || String(cause)}`;
+        if (cause && typeof cause === 'object' && 'errors' in cause && Array.isArray(cause.errors)) {
+          errMsg += '\n' + cause.errors.map((e: any) => e?.message || String(e)).join('\n');
+        }
+      }
+      await bot.sendMessage(msg.chat.id, `Something broke on my end. Try again.\n\nError details:\n\`\`\`\n${errMsg}\n\`\`\``, { parse_mode: 'Markdown' });
     }
   });
 
