@@ -35,6 +35,9 @@ async function tryClient(
   label: string
 ): Promise<string> {
   const res = await client.chat.completions.create({ model, messages, max_tokens: 800 });
+  if (res.usage) {
+    console.log(`[${label}] Used ${res.usage.total_tokens} tokens (Prompt: ${res.usage.prompt_tokens}, Completion: ${res.usage.completion_tokens})`);
+  }
   const text = res.choices[0]?.message?.content?.trim() ?? '';
   if (!text) throw new Error(`${label} returned empty response`);
   return text;
@@ -56,7 +59,7 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
 
   if (openrouter) {
     try {
-      return await tryClient(openrouter, 'google/gemini-2.0-flash-lite-preview-02-05:free', messages, 'OpenRouter');
+      return await tryClient(openrouter, 'openrouter/free', messages, 'OpenRouter');
     } catch (e) {
       errors.push(`OpenRouter: ${(e as Error).message}`);
     }
