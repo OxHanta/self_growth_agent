@@ -85,21 +85,28 @@ async function executeAction(
 
 // ── Parse LLM JSON response ────────────────────────────────────────────────────
 function parseBrainResponse(raw: string): { reply: string; action: { type: string; data: Record<string, unknown> } } {
-  // Strip markdown code fences if present
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    return {
-      reply: String(parsed.reply ?? raw),
-      action: {
-        type: String(parsed.action?.type ?? 'NONE'),
-        data: (parsed.action?.data as Record<string, unknown>) ?? {},
-      },
-    };
-  } catch {
-    // LLM didn't return JSON — use raw text as reply, no action
-    return { reply: raw, action: { type: 'NONE', data: {} } };
+  // Try to find a JSON object in the response
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        reply: String(parsed.reply ?? raw),
+        action: {
+          type: String(parsed.action?.type ?? 'NONE'),
+          data: (parsed.action?.data as Record<string, unknown>) ?? {},
+        },
+      };
+    } catch {
+      // JSON parse failed, fallback
+    }
   }
+  
+  // LLM didn't return valid JSON — use raw text as reply, no action
+  // Strip code fences if they exist
+  const cleanReply = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  return { reply: cleanReply, action: { type: 'NONE', data: {} } };
 }
 
 // ── Main bot factory ───────────────────────────────────────────────────────────

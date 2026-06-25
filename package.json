@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ts-node --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "npm run db:push && node dist/index.js",
     "setup": "ts-node --transpile-only scripts/setup.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push"
