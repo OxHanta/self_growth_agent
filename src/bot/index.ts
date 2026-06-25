@@ -2,14 +2,107 @@ import TelegramBot from 'node-telegram-bot-api';
 import { config } from '../config';
 import { isAuthorized } from './guard';
 import { chat } from '../llm/client';
-import { buildIntentPrompt } from '../llm/prompts';
-import { handleHabitLog, handleHabitStatus } from './handlers/habits';
-import { handleTaskAdd, handleTaskList, handleTaskDone } from './handlers/tasks';
-import { handleReminderSet, handleReminderList } from './handlers/reminders';
-import { handleAdvisory } from './handlers/advisory';
-import { handleSheetRead, handleSheetWrite } from './handlers/sheets';
-import { handleGeneral } from './handlers/general';
+import { buildBrainPrompt } from '../llm/prompts';
 
+// DB queries
+import { getAllHabits, getHabitByName, createHabit, logHabitCompletion } from '../db/queries/habits';
+import { createTask, getPendingTasks, completeTask } from '../db/queries/tasks';
+import { createReminder, getPendingReminders, cancelReminder } from '../db/queries/reminders';
+import { logDecision, getRecentDecisions } from '../db/queries/decisions';
+import { getConversationHistory, appendMessage } from '../db/queries/conversations';
+
+// ── Action executor ────────────────────────────────────────────────────────────
+async function executeAction(
+  action: { type: string; data: Record<string, unknown> }
+): Promise<void> {
+  switch (action.type) {
+    case 'HABIT_LOG': {
+      const name = String(action.data.name ?? '').toLowerCase().trim();
+      const skipped = Boolean(action.data.skipped);
+      if (!name) break;
+
+      let habit = await getHabitByName(name);
+      if (!habit) {
+        const category = /gym|workout|run|walk|sleep|eat|diet|water|steps|cycle|cycling/i.test(name)
+          ? 'health'
+          : /budget|save|invest|spend|expense/i.test(name)
+          ? 'financial'
+          : 'other';
+        habit = await createHabit(name, category);
+      }
+
+      if (!skipped) {
+        await logHabitCompletion(habit.id);
+      }
+      break;
+    }
+
+    case 'TASK_ADD': {
+      const description = String(action.data.description ?? '').trim();
+      if (description) await createTask(description);
+      break;
+    }
+
+    case 'TASK_DONE': {
+      const desc = String(action.data.description ?? '').trim().toLowerCase();
+      const tasks = await getPendingTasks();
+      const match = tasks.find(t => t.description.toLowerCase().includes(desc));
+      if (match) await completeTask(match.id);
+      break;
+    }
+
+    case 'REMINDER_SET': {
+      const text = String(action.data.text ?? '').trim();
+      const isoTime = String(action.data.iso_time ?? '');
+      if (!text || !isoTime) break;
+      const scheduledTime = new Date(isoTime);
+      if (!isNaN(scheduledTime.getTime()) && scheduledTime > new Date()) {
+        await createReminder(text, scheduledTime);
+      }
+      break;
+    }
+
+    case 'REMINDER_CANCEL': {
+      const text = String(action.data.text ?? '').trim().toLowerCase();
+      const reminders = await getPendingReminders();
+      const match = reminders.find(r => r.text.toLowerCase().includes(text));
+      if (match) await cancelReminder(match.id);
+      break;
+    }
+
+    case 'LOG_DECISION': {
+      const category = String(action.data.category ?? 'general');
+      const question = String(action.data.question ?? '');
+      const advice = String(action.data.advice ?? '');
+      if (question && advice) await logDecision(category, question, undefined, advice);
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+// ── Parse LLM JSON response ────────────────────────────────────────────────────
+function parseBrainResponse(raw: string): { reply: string; action: { type: string; data: Record<string, unknown> } } {
+  // Strip markdown code fences if present
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    return {
+      reply: String(parsed.reply ?? raw),
+      action: {
+        type: String(parsed.action?.type ?? 'NONE'),
+        data: (parsed.action?.data as Record<string, unknown>) ?? {},
+      },
+    };
+  } catch {
+    // LLM didn't return JSON — use raw text as reply, no action
+    return { reply: raw, action: { type: 'NONE', data: {} } };
+  }
+}
+
+// ── Main bot factory ───────────────────────────────────────────────────────────
 export function createBot(): TelegramBot {
   const bot = new TelegramBot(config.telegram.botToken, { polling: true });
 
@@ -19,7 +112,7 @@ export function createBot(): TelegramBot {
     const userId = msg.from?.id;
     if (!userId) return;
 
-    // /myid — always allowed so Mill can get his numeric ID on first run
+    // /myid — always allowed
     if (msg.text.trim() === '/myid') {
       await bot.sendMessage(
         msg.chat.id,
@@ -35,51 +128,53 @@ export function createBot(): TelegramBot {
     }
 
     const text = msg.text.trim();
-    console.log(`[${new Date().toISOString()}] Message from Mill: ${text}`);
+    console.log(`[${new Date().toISOString()}] Message from user ${userId}: ${text}`);
 
     try {
-      // Classify intent
-      const intentMessages = buildIntentPrompt(text);
-      const intent = (await chat(intentMessages)).trim().toUpperCase();
-      console.log(`Intent: ${intent}`);
+      await bot.sendChatAction(msg.chat.id, 'typing');
 
-      switch (intent) {
-        case 'HABIT_LOG':
-          await handleHabitLog(bot, msg);
-          break;
-        case 'HABIT_STATUS':
-          await handleHabitStatus(bot, msg);
-          break;
-        case 'TASK_ADD':
-          await handleTaskAdd(bot, msg);
-          break;
-        case 'TASK_LIST':
-          await handleTaskList(bot, msg);
-          break;
-        case 'TASK_DONE':
-          await handleTaskDone(bot, msg);
-          break;
-        case 'REMINDER_SET':
-          await handleReminderSet(bot, msg);
-          break;
-        case 'REMINDER_LIST':
-          await handleReminderList(bot, msg);
-          break;
-        case 'ADVISORY':
-          await handleAdvisory(bot, msg);
-          break;
-        case 'SHEET_READ':
-          await handleSheetRead(bot, msg);
-          break;
-        case 'SHEET_WRITE':
-          await handleSheetWrite(bot, msg);
-          break;
-        default:
-          await handleGeneral(bot, msg);
+      // Load persistent conversation history
+      const history = await getConversationHistory(userId);
+
+      // Load live context from DB
+      const [habits, tasks, reminders, recentDecisions] = await Promise.all([
+        getAllHabits(),
+        getPendingTasks(),
+        getPendingReminders(),
+        getRecentDecisions(5),
+      ]);
+
+      // Build the brain prompt
+      const messages = buildBrainPrompt(text, history, {
+        habits: habits.map(h => ({ name: h.name, streak: h.streak, lastCompleted: h.lastCompleted ?? null })),
+        tasks: tasks.map(t => ({ description: t.description, timesDeferred: t.timesDeferred })),
+        reminders: reminders.map(r => ({ text: r.text, scheduledTime: r.scheduledTime })),
+        recentDecisions: recentDecisions.map(d => ({ question: d.question, createdAt: d.createdAt })),
+      });
+
+      // Get LLM response
+      const raw = await chat(messages);
+      console.log(`[Brain raw]: ${raw.substring(0, 200)}`);
+
+      // Parse the JSON action + reply
+      const { reply, action } = parseBrainResponse(raw);
+
+      // Execute any DB action silently
+      if (action.type !== 'NONE') {
+        await executeAction(action);
+        console.log(`[Action executed]: ${action.type}`, action.data);
       }
+
+      // Save both sides of the conversation to DB
+      await appendMessage(userId, 'user', text);
+      await appendMessage(userId, 'assistant', reply);
+
+      // Send reply
+      await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
+
     } catch (err) {
-      console.error('Handler error:', err);
-      await bot.sendMessage(msg.chat.id, "Something broke on my end. Try again.");
+      console.error('Brain error:', err);
+      await bot.sendMessage(msg.chat.id, 'Something broke on my end. Try again.');
     }
   });
 

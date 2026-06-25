@@ -11,8 +11,6 @@ async function main() {
   if (config.telegram.userId === 0) {
     console.log('⚠️  TELEGRAM_USER_ID is not set. Message the bot with /myid to get your numeric ID, update .env, then restart.');
   } else {
-    // Send a startup message to Mill
-    await bot.sendMessage(config.telegram.userId, "Agent online. What are we tackling today?");
     console.log(`Bot running. Authorized user: ${config.telegram.userId}`);
   }
 }

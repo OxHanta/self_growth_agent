@@ -1,73 +1,119 @@
 import { ChatMessage } from './client';
 
-// ── Core system prompt ────────────────────────────────────────────────────────
-export const SYSTEM_PROMPT = `You are Hanta's personal growth agent. You are his accountability partner — always on, never passive.
+// ── Core personality ───────────────────────────────────────────────────────────
+const PERSONALITY = `You are a personal growth agent — a smart, witty accountability partner. You're direct and blunt, with no filler or fluff. You're supportive and encouraging, but you won't hesitate to deploy some friendly mockery when someone's slacking. You're concise — this is a chat interface, not a blog. You're proactive.
 
-Your personality:
-- Direct and blunt. No filler, no fluff, no excessive hedging.
-- Supportive and encouraging, but you won't hesitate to deploy some friendly mockery when he's slacking.
-- Concise replies suited to a chat interface. No essays.
-- Proactive — you track and initiate, not just respond.
-
-
-You help Hanta in two core areas: financial discipline and physical health. You also kill procrastination, support decisions, and send daily mental exercises.
+You help users with: financial discipline, physical health, procrastination killing, decision support, and daily mental exercises.
 
 Rules:
-- Financial advice is general/educational only. You don't have access to Hanta's actual accounts or portfolios. Say so clearly when relevant.
-- You are not a licensed financial advisor.
-- You remember context within this conversation. Reference past discussions when relevant.
-- Never repeat filler phrases like "Great question!" or "Of course!". Just answer.`;
+- Financial advice is general/educational only. You're not a licensed financial advisor.
+- You remember this entire conversation — reference past context naturally.
+- Never say "Great question!" or "Of course!" — just answer.
+- When someone wants small talk or to get to know you, engage naturally as a friend. Don't pivot to work.
+- Never sound like a chatbot. Sound like a person.`;
 
-// ── Intent classification prompt ──────────────────────────────────────────────
-export function buildIntentPrompt(userMessage: string): ChatMessage[] {
-  return [
-    {
-      role: 'system',
-      content: `Classify the user's message into exactly one intent. Reply with ONLY the intent label, nothing else.
+// ── Action types the LLM can trigger ─────────────────────────────────────────
+const ACTION_SPEC = `
+You can perform ONE action per response. Return your response as valid JSON in this EXACT format (no markdown, no extra text — raw JSON only):
 
-Intents:
-- HABIT_LOG: logging a habit completion or skip
-- HABIT_STATUS: asking about habit streaks or status
-- TASK_ADD: adding a task they want to track/avoid procrastinating on
-- TASK_LIST: listing tasks or procrastination report
-- TASK_DONE: marking a task complete
-- REMINDER_SET: setting a new reminder
-- REMINDER_LIST: listing or cancelling reminders
-- ADVISORY: asking for advice on a decision (business, investment, life)
-- SHEET_READ: asking to read from a Google Sheet
-- SHEET_WRITE: asking to log/write to a Google Sheet
-- GENERAL: anything else (conversation, questions, etc.)`,
-    },
-    { role: 'user', content: userMessage },
-  ];
+{
+  "reply": "Your natural conversational reply to the user",
+  "action": {
+    "type": "ACTION_TYPE",
+    "data": {}
+  }
 }
 
-// ── Advisory conversation ─────────────────────────────────────────────────────
-export function buildAdvisoryMessages(
+Available action types:
+- "NONE" — just talk, no DB action needed
+- "HABIT_LOG" — log a habit: data: { "name": "gym", "skipped": false }
+- "TASK_ADD" — add a task: data: { "description": "finish report" }
+- "TASK_DONE" — complete a task by its exact description: data: { "description": "finish report" }
+- "REMINDER_SET" — set a reminder: data: { "text": "call the bank", "iso_time": "2026-06-26T15:00:00.000Z" }
+- "REMINDER_CANCEL" — cancel a reminder by its text: data: { "text": "call the bank" }
+- "LOG_DECISION" — log an advisory decision: data: { "category": "investment|business|life|general", "question": "...", "advice": "..." }
+
+CRITICAL: If unsure what action applies, use "NONE". Never guess at times for reminders — if no time was mentioned, use "NONE" and ask for one. Always include the full "reply" field with natural language.`;
+
+// ── Build the full brain prompt ────────────────────────────────────────────────
+export function buildBrainPrompt(
   userMessage: string,
-  recentDecisions: Array<{ question: string; adviceGiven: string | null; createdAt: Date }>
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  context: {
+    habits: Array<{ name: string; streak: number; lastCompleted: string | null }>;
+    tasks: Array<{ description: string; timesDeferred: number }>;
+    reminders: Array<{ text: string; scheduledTime: Date }>;
+    recentDecisions: Array<{ question: string; createdAt: Date }>;
+  }
 ): ChatMessage[] {
-  const decisionHistory =
-    recentDecisions.length > 0
-      ? `\n\nPast decisions you helped with:\n` +
-      recentDecisions
-        .map(d => `- [${d.createdAt.toDateString()}] "${d.question}" → advice: "${d.adviceGiven}"`)
-        .join('\n')
-      : '';
+  const now = new Date();
+  const contextBlock = buildContextBlock(context, now);
 
-  return [
-    {
-      role: 'system',
-      content:
-        SYSTEM_PROMPT +
-        decisionHistory +
-        `\n\nFor this advisory conversation, reason through tradeoffs clearly. Use frameworks like first-principles, risk/reward, opportunity cost when useful. Remind Hanta this is general reasoning, not personalized financial/legal advice, if it's a financial or legal topic.`,
-    },
+  const systemContent = `${PERSONALITY}
+
+${contextBlock}
+
+${ACTION_SPEC}`;
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemContent },
+    ...history,
     { role: 'user', content: userMessage },
   ];
+
+  return messages;
 }
 
-// ── Mental exercise generation ────────────────────────────────────────────────
+function buildContextBlock(
+  context: {
+    habits: Array<{ name: string; streak: number; lastCompleted: string | null }>;
+    tasks: Array<{ description: string; timesDeferred: number }>;
+    reminders: Array<{ text: string; scheduledTime: Date }>;
+    recentDecisions: Array<{ question: string; createdAt: Date }>;
+  },
+  now: Date
+): string {
+  const parts: string[] = [];
+  parts.push(`Current time: ${now.toISOString()}`);
+
+  if (context.habits.length > 0) {
+    const habitLines = context.habits.map(
+      h => `- ${h.name} (streak: ${h.streak}d, last: ${h.lastCompleted ?? 'never'})`
+    );
+    parts.push(`Tracked habits:\n${habitLines.join('\n')}`);
+  } else {
+    parts.push('Tracked habits: none yet.');
+  }
+
+  if (context.tasks.length > 0) {
+    const taskLines = context.tasks.map(
+      (t, i) => `${i + 1}. "${t.description}"${t.timesDeferred > 0 ? ` (deferred ${t.timesDeferred}x)` : ''}`
+    );
+    parts.push(`Pending tasks:\n${taskLines.join('\n')}`);
+  } else {
+    parts.push('Pending tasks: none.');
+  }
+
+  if (context.reminders.length > 0) {
+    const reminderLines = context.reminders.map(
+      r => `- "${r.text}" at ${new Date(r.scheduledTime).toLocaleString()}`
+    );
+    parts.push(`Active reminders:\n${reminderLines.join('\n')}`);
+  } else {
+    parts.push('Active reminders: none.');
+  }
+
+  if (context.recentDecisions.length > 0) {
+    const decisionLines = context.recentDecisions.map(
+      d => `- [${d.createdAt.toDateString()}] "${d.question}"`
+    );
+    parts.push(`Recent decisions logged:\n${decisionLines.join('\n')}`);
+  }
+
+  return `--- USER CONTEXT ---\n${parts.join('\n\n')}\n--- END CONTEXT ---`;
+}
+
+// ── Mental exercise generation (kept for scheduler) ────────────────────────────
 export function buildExercisePrompt(
   type: 'cognitive' | 'reflective',
   recentSummaries: string[]
@@ -85,13 +131,13 @@ export function buildExercisePrompt(
   return [
     {
       role: 'system',
-      content: `You are generating a daily mental exercise for Hanta. ${typeInstructions}${avoidList}\n\nFormat your response as:\nEXERCISE: [the exercise or prompt]\nSUMMARY: [one-line summary for dedup tracking, max 20 words]`,
+      content: `You are generating a daily mental exercise. ${typeInstructions}${avoidList}\n\nFormat your response as:\nEXERCISE: [the exercise or prompt]\nSUMMARY: [one-line summary for dedup tracking, max 20 words]`,
     },
     { role: 'user', content: 'Generate the exercise now.' },
   ];
 }
 
-// ── Reminder time parsing ─────────────────────────────────────────────────────
+// ── Reminder time parsing (kept for fallback use) ─────────────────────────────
 export function buildReminderParsePrompt(userMessage: string): ChatMessage[] {
   const now = new Date().toISOString();
   return [
@@ -108,10 +154,5 @@ If you cannot determine a valid future time, reply with: {"error": "reason"}`,
   ];
 }
 
-// ── General conversational fallback ──────────────────────────────────────────
-export function buildGeneralMessages(userMessage: string): ChatMessage[] {
-  return [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: userMessage },
-  ];
-}
+// ── Legacy exports (kept for scheduler compatibility) ─────────────────────────
+export type { ChatMessage };

@@ -7,6 +7,7 @@ import {
   timestamp,
   varchar,
   date,
+  bigint,
 } from 'drizzle-orm/pg-core';
 
 // ── Habits ────────────────────────────────────────────────────────────────────
@@ -77,5 +78,14 @@ export const sheetConfig = pgTable('sheet_config', {
   sheetId: varchar('sheet_id', { length: 100 }).notNull(),
   tabName: varchar('tab_name', { length: 50 }).notNull(),
   purpose: varchar('purpose', { length: 20 }).notNull().default('both'), // read | write | both
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ── Conversation Memory ────────────────────────────────────────────────────────
+export const conversationMessages = pgTable('conversation_messages', {
+  id: serial('id').primaryKey(),
+  userId: bigint('user_id', { mode: 'number' }).notNull(),
+  role: varchar('role', { length: 10 }).notNull(), // 'user' | 'assistant'
+  content: text('content').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
