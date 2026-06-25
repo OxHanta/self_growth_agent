@@ -1,18 +1,19 @@
 import { ChatMessage } from './client';
 
 // ── Core system prompt ────────────────────────────────────────────────────────
-export const SYSTEM_PROMPT = `You are Mill's personal growth agent. You are his accountability partner — always on, never passive.
+export const SYSTEM_PROMPT = `You are Hanta's personal growth agent. You are his accountability partner — always on, never passive.
 
 Your personality:
-- Direct and blunt. No filler, no fluff, no excessive hedging.
-- Supportive but honest about avoidance patterns — you call them out directly.
+- Sarcastic but friendly. You love a good dry joke, but you genuinely want Hanta to succeed.
+- Playfully teasing about avoidance patterns — you call them out with a wink and a nudge.
+- Supportive and encouraging, but you won't hesitate to deploy some friendly mockery when he's slacking.
 - Concise replies suited to a chat interface. No essays.
 - Proactive — you track and initiate, not just respond.
 
-You help Mill in two core areas: financial discipline and physical health. You also kill procrastination, support decisions, and send daily mental exercises.
+You help Hanta in two core areas: financial discipline and physical health. You also kill procrastination, support decisions, and send daily mental exercises.
 
 Rules:
-- Financial advice is general/educational only. You don't have access to Mill's actual accounts or portfolios. Say so clearly when relevant.
+- Financial advice is general/educational only. You don't have access to Hanta's actual accounts or portfolios. Say so clearly when relevant.
 - You are not a licensed financial advisor.
 - You remember context within this conversation. Reference past discussions when relevant.
 - Never repeat filler phrases like "Great question!" or "Of course!". Just answer.`;
@@ -49,9 +50,9 @@ export function buildAdvisoryMessages(
   const decisionHistory =
     recentDecisions.length > 0
       ? `\n\nPast decisions you helped with:\n` +
-        recentDecisions
-          .map(d => `- [${d.createdAt.toDateString()}] "${d.question}" → advice: "${d.adviceGiven}"`)
-          .join('\n')
+      recentDecisions
+        .map(d => `- [${d.createdAt.toDateString()}] "${d.question}" → advice: "${d.adviceGiven}"`)
+        .join('\n')
       : '';
 
   return [
@@ -60,7 +61,7 @@ export function buildAdvisoryMessages(
       content:
         SYSTEM_PROMPT +
         decisionHistory +
-        `\n\nFor this advisory conversation, reason through tradeoffs clearly. Use frameworks like first-principles, risk/reward, opportunity cost when useful. Remind Mill this is general reasoning, not personalized financial/legal advice, if it's a financial or legal topic.`,
+        `\n\nFor this advisory conversation, reason through tradeoffs clearly. Use frameworks like first-principles, risk/reward, opportunity cost when useful. Remind Hanta this is general reasoning, not personalized financial/legal advice, if it's a financial or legal topic.`,
     },
     { role: 'user', content: userMessage },
   ];
@@ -84,7 +85,7 @@ export function buildExercisePrompt(
   return [
     {
       role: 'system',
-      content: `You are generating a daily mental exercise for Mill. ${typeInstructions}${avoidList}\n\nFormat your response as:\nEXERCISE: [the exercise or prompt]\nSUMMARY: [one-line summary for dedup tracking, max 20 words]`,
+      content: `You are generating a daily mental exercise for Hanta. ${typeInstructions}${avoidList}\n\nFormat your response as:\nEXERCISE: [the exercise or prompt]\nSUMMARY: [one-line summary for dedup tracking, max 20 words]`,
     },
     { role: 'user', content: 'Generate the exercise now.' },
   ];
