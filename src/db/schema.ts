@@ -106,6 +106,18 @@ export const selfState = pgTable('self_state', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// ── Agent Preferences (user-stated style/constraint rules) ─────────────────────
+export const agentPreferences = pgTable('agent_preferences', {
+  id: serial('id').primaryKey(),
+  // Short canonical key, e.g. "no_exclamation_marks" — for dedup/lookup
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  // Human-readable rule the agent must obey, e.g. "Never use exclamation marks"
+  rule: text('rule').notNull(),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // ── Self-Reflection Journal (append-only) ──────────────────────────────────────
 export const selfReflections = pgTable('self_reflections', {
   id: serial('id').primaryKey(),

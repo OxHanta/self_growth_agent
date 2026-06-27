@@ -96,8 +96,17 @@ async function createTables() {
         theme VARCHAR(30) NOT NULL DEFAULT 'general',
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS agent_preferences (
+        id SERIAL PRIMARY KEY,
+        key VARCHAR(100) NOT NULL UNIQUE,
+        rule TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
     `);
-    console.log('Database tables created.');
+    console.log('✅ Database tables created.');
   } finally {
     client.release();
   }
@@ -117,7 +126,7 @@ async function seedSelfState() {
       )
       ON CONFLICT (id) DO NOTHING;
     `);
-    console.log('Self-model seeded.');
+    console.log('✅ Self-model seeded.');
   } finally {
     client.release();
   }
@@ -138,9 +147,9 @@ async function provisionSheets() {
       const sheetId = await createSpreadsheet(`Mill Growth — ${sheet.name}`);
       await ensureTab(sheetId, sheet.tab);
       await upsertSheet(sheet.name, sheetId, sheet.tab, 'both');
-      console.log(`Created sheet: "${sheet.name}" (ID: ${sheetId})`);
+      console.log(`✅ Created sheet: "${sheet.name}" (ID: ${sheetId})`);
     } catch (err) {
-      console.error(`Failed to create "${sheet.name}":`, (err as Error).message);
+      console.error(`❌ Failed to create "${sheet.name}":`, (err as Error).message);
     }
   }
 }

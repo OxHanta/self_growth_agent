@@ -11,6 +11,7 @@ import { createReminder, getPendingReminders, cancelReminder } from '../db/queri
 import { logDecision, getRecentDecisions } from '../db/queries/decisions';
 import { getConversationHistory, appendMessage } from '../db/queries/conversations';
 import { getSelfState, initSelfState, getRecentReflections } from '../db/queries/self';
+import { getActivePreferences, setPreference, removePreference } from '../db/queries/preferences';
 
 // ── Action executor ────────────────────────────────────────────────────────────
 async function executeAction(
@@ -76,6 +77,25 @@ async function executeAction(
       const question = String(action.data.question ?? '');
       const advice = String(action.data.advice ?? '');
       if (question && advice) await logDecision(category, question, undefined, advice);
+      break;
+    }
+
+    case 'PREFERENCE_SET': {
+      const key = String(action.data.key ?? '').trim();
+      const rule = String(action.data.rule ?? '').trim();
+      if (key && rule) {
+        await setPreference(key, rule);
+        console.log(`[Preference] Saved: ${key} -> ${rule}`);
+      }
+      break;
+    }
+
+    case 'PREFERENCE_REMOVE': {
+      const key = String(action.data.key ?? '').trim();
+      if (key) {
+        const removed = await removePreference(key);
+        console.log(`[Preference] ${removed ? 'Removed' : 'Not found'}: ${key}`);
+      }
       break;
     }
 
@@ -164,17 +184,18 @@ export function createBot(): TelegramBot {
       // Load persistent conversation history
       const history = await getConversationHistory(userId);
 
-      // Load live context from DB (incl. the agent's self-model)
-      const [habits, tasks, reminders, recentDecisions, self, recentReflections] = await Promise.all([
+      // Load live context from DB (incl. the agent's self-model + saved preferences)
+      const [habits, tasks, reminders, recentDecisions, self, recentReflections, preferences] = await Promise.all([
         getAllHabits(),
         getPendingTasks(),
         getPendingReminders(),
         getRecentDecisions(5),
         getSelfState(),
         getRecentReflections(3),
+        getActivePreferences(),
       ]);
 
-      // Build the brain prompt (self-model shapes the agent's self-awareness)
+      // Build the brain prompt (self-model + preferences shape the agent's behavior)
       const messages = buildBrainPrompt(text, history, {
         habits: habits.map(h => ({ name: h.name, streak: h.streak, lastCompleted: h.lastCompleted ?? null })),
         tasks: tasks.map(t => ({ description: t.description, timesDeferred: t.timesDeferred })),
@@ -182,6 +203,7 @@ export function createBot(): TelegramBot {
         recentDecisions: recentDecisions.map(d => ({ question: d.question, createdAt: d.createdAt })),
         self,
         recentReflections: recentReflections.map(r => ({ reflection: r.reflection, theme: r.theme, createdAt: r.createdAt })),
+        preferences: preferences.map(p => ({ key: p.key, rule: p.rule })),
       });
 
       // Get LLM response
