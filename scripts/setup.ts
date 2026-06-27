@@ -65,6 +65,7 @@ async function createTables() {
         exercise_type VARCHAR(20) NOT NULL,
         content_summary TEXT NOT NULL,
         full_content TEXT NOT NULL,
+        difficulty VARCHAR(10),
         sent_at TIMESTAMP DEFAULT NOW() NOT NULL
       );
 

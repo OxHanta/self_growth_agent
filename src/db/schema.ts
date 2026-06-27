@@ -65,9 +65,10 @@ export const reminders = pgTable('reminders', {
 // ── Mental Exercises Sent ─────────────────────────────────────────────────────
 export const mentalExercisesSent = pgTable('mental_exercises_sent', {
   id: serial('id').primaryKey(),
-  exerciseType: varchar('exercise_type', { length: 20 }).notNull(), // cognitive | reflective
+  exerciseType: varchar('exercise_type', { length: 20 }).notNull(), // cognitive | reflective | physical
   contentSummary: text('content_summary').notNull(),
   fullContent: text('full_content').notNull(),
+  difficulty: varchar('difficulty', { length: 10 }), // easy | medium | hard (nullable for old rows)
   sentAt: timestamp('sent_at').defaultNow().notNull(),
 });
 

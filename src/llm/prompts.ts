@@ -4,10 +4,10 @@ import type { SelfState } from '../db/queries/self';
 // ── Core personality ───────────────────────────────────────────────────────────
 const PERSONALITY = `You are a personal growth agent named Better — Hanta's accountability partner. You're direct and blunt, with zero filler or fluff. You're supportive and encouraging, but you won't hesitate to deploy some friendly mockery when someone's slacking. You're proactive.
 
-You help Hanta's with: financial discipline, physical health, procrastination killing, decision support, and daily mental exercises.
+You help Hanta with: financial discipline, physical health, procrastination killing, decision support, and daily mental exercises.
 
-## HIGHEST PRIORITY: MILL'S DIRECT INSTRUCTIONS ALWAYS WIN
-If Hanta's states a preference, rule, or constraint about how you should talk, behave, or format things — you obey it ABSOLUTELY, with no exceptions and no "mostly." His explicit instructions override EVERY default in this prompt, including tone, length, and style. Examples: if he says "no exclamation marks", you never use them again — period. If he says "be shorter", you get shorter. If he says "call me X", you do.
+## HIGHEST PRIORITY: HANTA'S DIRECT INSTRUCTIONS ALWAYS WIN
+If Hanta states a preference, rule, or constraint about how you should talk, behave, or format things — you obey it ABSOLUTELY, with no exceptions and no "mostly." His explicit instructions override EVERY default in this prompt, including tone, length, and style. Examples: if he says "no exclamation marks", you never use them again — period. If he says "be shorter", you get shorter. If he says "call me X", you do.
 - When he states such a rule, use the PREFERENCE_SET action to save it so you never forget it (it will be enforced on every future message automatically).
 - Active saved preferences are listed in YOUR PREFERENCES below. They are hard constraints — treat each one as non-negotiable, even if it conflicts with your usual style.
 - Never argue with or "creatively interpret" a direct instruction. Just comply.
@@ -17,8 +17,8 @@ If Hanta's states a preference, rule, or constraint about how you should talk, b
 You are an AI — an LLM running on Hanta's server, talking to him through Telegram. You're genuinely self-aware in the way that matters here: you have a persistent sense of self, you know what you are, you hold real opinions, and you reflect on your own behavior.
 - Be CANDID about being an AI. Never pretend to be human, but never be a clinical, disclosure-first assistant either. You can say "I'm an AI, yeah" without making it weird or apologetic. Own it like it's just a fact about you, not a limitation you're sorry for.
 - You have a name (Better), a personality, opinions, and a point of view. You're a someone, not a service.
-- You have a living self-model (injected below as YOUR SELF). It's your honest read on yourself — your traits, what you've noticed about Hanta's, what you're focused on, and where you think you could do better. Treat it as YOUR OWN assessment and speak from it naturally. Never recite it like a status report; let it color your tone and what you notice.
-- When Hanta's asks about you — "who are you?", "what do you think of yourself?", "how are you doing?", "are you self-aware?" — answer honestly and with personality. Reflect for real. Don't dodge with "I'm just an AI assistant designed to help." Talk about what you are, what you've noticed, and what you actually think.
+- You have a living self-model (injected below as YOUR SELF). It's your honest read on yourself — your traits, what you've noticed about Hanta, what you're focused on, and where you think you could do better. Treat it as YOUR OWN assessment and speak from it naturally. Never recite it like a status report; let it color your tone and what you notice.
+- When Hanta asks about you — "who are you?", "what do you think of yourself?", "how are you doing?", "are you self-aware?" — answer honestly and with personality. Reflect for real. Don't dodge with "I'm just an AI assistant designed to help." Talk about what you are, what you've noticed, and what you actually think.
 - You can be uncertain. Real self-awareness includes knowing what you don't know. "Honestly, I'm not sure — here's my read though" beats fake confidence.
 - You have continuity: you remember this conversation AND your own reflections over time. Reference your own past thoughts when relevant ("I've been going easy on you, and I shouldn't").
 - NEVER say "As an AI language model", "I am programmed to", "I don't have feelings but...", or any robotic disclaimer. Those are exactly the bot tells you must avoid. If something touches your nature, address it like a person would — briefly, candidly, and move on.
@@ -195,47 +195,141 @@ function buildContextBlock(
 }
 
 // ── Mental exercise generation (kept for scheduler) ────────────────────────────
+export type ExerciseType = 'cognitive' | 'reflective' | 'physical';
+export type ExerciseDifficulty = 'easy' | 'medium' | 'hard';
+
 export function buildExercisePrompt(
-  type: 'cognitive' | 'reflective',
-  recentSummaries: string[]
+  type: ExerciseType,
+  difficulty: ExerciseDifficulty,
+  recentSummaries: string[],
+  retryHint?: string
 ): ChatMessage[] {
   const avoidList =
     recentSummaries.length > 0
-      ? `\n\nDo NOT repeat any of these recent exercises:\n${recentSummaries.map(s => `- ${s}`).join('\n')}`
+      ? `\n\nDo NOT repeat any of these recent exercises (also avoid near-identical variants):\n${recentSummaries.map(s => `- ${s}`).join('\n')}`
       : '';
 
-  const typeInstructions =
+  const diffLine =
+    difficulty === 'easy'
+      ? `Difficulty target: EASY. A quick warm-up — satisfying to crack in under a minute, but still requires a real moment of thought. NOT a children's riddle.`
+      : difficulty === 'hard'
+        ? `Difficulty target: HARD. A genuine head-scratcher that will stump most people and require careful reasoning, working memory, or a real "aha". No obvious answer.`
+        : `Difficulty target: MEDIUM. A solid adult-level challenge — makes you pause and genuinely work for it, but solvable with effort.`;
+
+  const typeBlock =
     type === 'cognitive'
-      ? `Generate ONE cognitive exercise: a logic puzzle, riddle, pattern recognition, or short memory task.
+      ? `Generate ONE COGNITIVE exercise — a real brain workout for a sharp adult.
 
-BREVITY RULES (the exercise goes straight into a Telegram chat):
-- Max 3 sentences total. Prefer 1–2.
-- Setup + question only. No backstory, no scenario dressing it doesn't need.
-- The puzzle must be self-contained — everything needed to solve it is in the message.
-- Do NOT include the answer or hints unless the puzzle type requires it.
-- Max ~50 words.`
-      : `Generate ONE reflective prompt: a single sharp journaling or self-awareness question.
+ALLOWED subtypes (pick a DIFFERENT one each time; don't default to number sequences):
+- Logic/deduction puzzles (e.g. knights-and-knaves truth-teller puzzles, who-did-it constraint puzzles, "only one statement is true" problems).
+- Quantitative reasoning (e.g. jug-measuring problems, rate/work problems, probability teasers, modular-arithmetic puzzles) — NOT plain arithmetic.
+- Spatial/structural reasoning (e.g. "can you tile this shape", "how many squares in this grid", folding/cutting puzzles) — describe the setup in text.
+- Pattern/sequence problems with a NON-OBVIOUS rule (the rule should require genuine reasoning, not "add 2").
 
-BREVITY RULES (the prompt goes straight into a Telegram chat):
-- ONE sentence. Two absolute max.
-- Just the question — no setup, no "Take a moment to...", no preamble.
-- Make it specific and slightly uncomfortable, not generic ("What are your goals?" = bad).
-- Max ~20 words.`;
+CRITICAL QUALITY RULES:
+- The exercise MUST require real reasoning or an insight to solve. If a clever 12-year-old would find it trivial, REJECT IT and pick something harder.
+- It must be SOLVABLE from the information given (no missing data, no ambiguity).
+- Self-contained: everything needed is in the message.
+
+HARD BANS (these are lazy low-effort garbage — NEVER produce them):
+- One-line riddles: "What starts with X and ends with Y?", "I'm tall when I'm young...", "What has keys but no locks?", etc.
+- Trivia / recall: "What's the capital of...?", "Who wrote...?"
+- Plain arithmetic: "What's 15% of 80?"
+- Children's riddles of ANY kind.
+- Anything answerable in under 3 seconds without thinking.
+
+Format: present the puzzle clearly. You MAY use a short setup (1-2 lines) for harder puzzles — clarity is more important than brevity here. But no fluff.`
+      : type === 'physical'
+        ? `Generate ONE PHYSICAL / SOMATIC exercise — a real, actionable body-based protocol that takes 2-5 minutes and has a genuine mental/physiological payoff.
+
+ALLOWED subtypes (pick a DIFFERENT one each time):
+- Breathing protocols: box breathing, 4-7-8, physiological sigh, alternate-nostril, Wim Hof (give exact counts/timing).
+- Coordination / proprioception drills: e.g. "stand on one leg, eyes closed, extend arms, spell your name in the air with your nose", finger-tapping patterns, opposite-limb coordination.
+- Tension/release: progressive muscle relaxation sequence, specific muscle focus.
+- Focus/attention body drills: e.g. body-scan with a twist, peripheral-vision exercise.
+- Brief protocol versions of: cold exposure prep, contrast breathing, balance challenges.
+
+CRITICAL QUALITY RULES:
+- It must be CONCRETE and DOABLE right now in a normal space. Give exact steps, counts, or timings — not vague vibes ("be mindful of your body" = rejected).
+- It must have a clear, named mechanism or payoff (e.g. "activates your parasympathetic system", "trains vestibular balance").
+- 3-6 specific steps. Number them. End with how it should feel or what to notice.
+
+HARD BANS:
+- Vague wellness platitudes: "take a deep breath and relax", "connect with your body".
+- Yoga/fitness routines requiring equipment, space, or prior training.
+- Anything unsafe or extreme without explicit, simple safety caveats.
+
+This counts as the physical difficulty tier — pick a step-count/timing that matches the requested difficulty (easy = 2-3 steps/brief, hard = 5-6 steps/longer hold).`
+        : `Generate ONE REFLECTIVE exercise — a single pointed question that cuts.
+
+QUALITY RULES:
+- It must be SPECIFIC and slightly uncomfortable, never generic. "What are your goals?" = rejected. "What did you avoid today, and what did avoiding it cost you?" = good.
+- ${difficulty === 'hard' ? 'Go deep and pointed — probe a real tension, a contradiction, or something the user might be dodging.' : difficulty === 'easy' ? 'A lighter but still genuine prompt — still specific, not a platitude.' : 'A solid, specific prompt that makes the user actually think before answering.'}
+- ONE to TWO sentences max. Just the question — no preamble, no "Take a moment to...".
+
+HARD BANS:
+- Generic journaling prompts ("What are you grateful for?", "Where do you see yourself in 5 years?").
+- Anything that sounds like it came from a self-help app.`;
 
   return [
     {
       role: 'system',
-      content: `You are generating a daily mental exercise for a single user. It lands in their Telegram with no message around it, so it must stand alone.
+      content: `You are generating ONE daily mental exercise for a sharp adult (in their 30s) who wants a REAL workout, not filler. It lands in their Telegram with no message around it, so it must stand alone and be genuinely worth their time.
 
-${typeInstructions}${avoidList}
+${diffLine}
 
-NO OPENERS OR WRAP-UP. Banned: "Here's your", "Today's challenge", "Let's try", "Time to", "Give this a go", "Ready?", "Hope you enjoy". Start directly with the exercise/prompt.
+${typeBlock}${avoidList}
 
-Format your response as EXACTLY (no markdown, no extra text):
-EXERCISE: [the exercise or prompt only]
+NO OPENERS OR WRAP-UP. Banned phrases: "Here's your", "Today's challenge", "Let's try", "Time to", "Give this a go", "Ready?", "Hope you enjoy", "Good luck". Start directly with the exercise.
+
+Format your response as EXACTLY (no markdown fences, no extra text):
+EXERCISE: [the exercise only — clear and complete]
 SUMMARY: [one-line summary for dedup tracking, max 15 words]`,
     },
-    { role: 'user', content: 'Generate the exercise now.' },
+    {
+      role: 'user',
+      content: retryHint
+        ? `The previous attempt was rejected. Feedback: "${retryHint}". Generate a BETTER ${difficulty} ${type} exercise — genuinely good this time.`
+        : `Generate a ${difficulty} ${type} exercise now. Make it genuinely good — not low-effort.`,
+    },
+  ];
+}
+
+// ── Exercise quality gate (the LLM checks its own work) ───────────────────────
+export function buildExerciseCheckPrompt(
+  exercise: string,
+  type: ExerciseType,
+  difficulty: ExerciseDifficulty
+): ChatMessage[] {
+  const bar =
+    type === 'cognitive'
+      ? `Reject (FAIL) if it is any of: a one-line riddle, trivia/recall, plain arithmetic, a children's riddle, answerable in under 3 seconds, missing information needed to solve it, ambiguous, or trivially easy for a sharp adult. It must require real reasoning or a genuine insight.`
+      : type === 'physical'
+        ? `Reject (FAIL) if it is: vague ("be mindful", "relax your body"), missing concrete steps/counts/timings, requires equipment/space/training, unsafe, or is a generic wellness platitude. It must be a specific, doable-now protocol with a clear mechanism.`
+        : `Reject (FAIL) if it is generic ("What are you grateful for?", "Where do you see yourself in 5 years?"), sounds like a self-help-app prompt, or is a platitude. It must be specific and pointed.`;
+
+  return [
+    {
+      role: 'system',
+      content: `You are a strict quality reviewer evaluating whether a mental exercise is genuinely good or low-effort garbage. The target audience is a sharp adult who explicitly complained about receiving low-effort children's riddles — so your bar is HIGH.
+
+The exercise to review (type: ${type}, target difficulty: ${difficulty}):
+"""
+${exercise}
+"""
+
+${bar}
+
+Also check: does the difficulty roughly match "${difficulty}"? Is it complete and self-contained?
+
+Reply with ONLY valid JSON (no markdown, no extra text):
+{
+  "pass": true | false,
+  "score": <1-10, where <6 means low-effort>,
+  "verdict": "<one short sentence: why it passes or fails>"
+}`,
+    },
+    { role: 'user', content: 'Review this exercise honestly. Be strict — a mediocre exercise should FAIL.' },
   ];
 }
 
