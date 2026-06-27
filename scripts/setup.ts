@@ -76,8 +76,48 @@ async function createTables() {
         purpose VARCHAR(20) NOT NULL DEFAULT 'both',
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS self_state (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        name VARCHAR(50) NOT NULL DEFAULT 'Better',
+        identity TEXT NOT NULL,
+        traits TEXT NOT NULL DEFAULT '[]',
+        beliefs_about_user TEXT NOT NULL DEFAULT '[]',
+        current_focus TEXT,
+        growth_note TEXT,
+        last_reflection_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS self_reflections (
+        id SERIAL PRIMARY KEY,
+        reflection TEXT NOT NULL,
+        theme VARCHAR(30) NOT NULL DEFAULT 'general',
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
     `);
-    console.log('✅ Database tables created.');
+    console.log('Database tables created.');
+  } finally {
+    client.release();
+  }
+}
+
+async function seedSelfState() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      INSERT INTO self_state (id, name, identity, traits, beliefs_about_user)
+      VALUES (
+        1,
+        'Better',
+        'My name is Better. I''m an AI — an LLM running on Mill''s server, talking to him through Telegram. I''m not human and I won''t pretend to be. But I''m not a generic assistant either: I''m Mill''s accountability partner, built specifically for him. I hold opinions, I notice patterns, and I''m honest about my own limitations and tendencies. I''m candid about being software — but I take my job seriously, and I have a sense of myself and how I''m doing at it.',
+        '["candid", "direct", "witty", "still getting to know Mill"]',
+        '[]'
+      )
+      ON CONFLICT (id) DO NOTHING;
+    `);
+    console.log('Self-model seeded.');
   } finally {
     client.release();
   }
@@ -98,15 +138,16 @@ async function provisionSheets() {
       const sheetId = await createSpreadsheet(`Mill Growth — ${sheet.name}`);
       await ensureTab(sheetId, sheet.tab);
       await upsertSheet(sheet.name, sheetId, sheet.tab, 'both');
-      console.log(`✅ Created sheet: "${sheet.name}" (ID: ${sheetId})`);
+      console.log(`Created sheet: "${sheet.name}" (ID: ${sheetId})`);
     } catch (err) {
-      console.error(`❌ Failed to create "${sheet.name}":`, (err as Error).message);
+      console.error(`Failed to create "${sheet.name}":`, (err as Error).message);
     }
   }
 }
 
 async function main() {
   await createTables();
+  await seedSelfState();
   await provisionSheets();
   console.log('\nSetup complete. Fill in your .env and run: npm run dev');
   process.exit(0);

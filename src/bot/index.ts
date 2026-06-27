@@ -10,6 +10,7 @@ import { createTask, getPendingTasks, completeTask } from '../db/queries/tasks';
 import { createReminder, getPendingReminders, cancelReminder } from '../db/queries/reminders';
 import { logDecision, getRecentDecisions } from '../db/queries/decisions';
 import { getConversationHistory, appendMessage } from '../db/queries/conversations';
+import { getSelfState, initSelfState, getRecentReflections } from '../db/queries/self';
 
 // ── Action executor ────────────────────────────────────────────────────────────
 async function executeAction(
@@ -26,8 +27,8 @@ async function executeAction(
         const category = /gym|workout|run|walk|sleep|eat|diet|water|steps|cycle|cycling/i.test(name)
           ? 'health'
           : /budget|save|invest|spend|expense/i.test(name)
-          ? 'financial'
-          : 'other';
+            ? 'financial'
+            : 'other';
         habit = await createHabit(name, category);
       }
 
@@ -83,11 +84,31 @@ async function executeAction(
   }
 }
 
+// ── Convert LLM markdown to Telegram-safe HTML ────────────────────────────────
+// Why: legacy Markdown parse_mode is brutal — stray `_`, `*`, or backticks either
+// break the message ("Something broke on my end") or render as malformed formatting.
+// HTML mode treats bare `*`/`_` as literal text, so we only convert the SAFE cases.
+function toTelegramHtml(text: string): string {
+  return text
+    // 1. escape HTML entities first (so advice with <, >, & never breaks parsing)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // 2. strip any stray code fences (e.g. leaked ```json wrappers)
+    .replace(/```/g, '')
+    // 3. inline code: `code`
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    // 4. bold: **text**
+    .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+    // NOTE: single `*` and `_` are left as literal text (HTML mode renders them plainly)
+    .trim();
+}
+
 // ── Parse LLM JSON response ────────────────────────────────────────────────────
 function parseBrainResponse(raw: string): { reply: string; action: { type: string; data: Record<string, unknown> } } {
   // Try to find a JSON object in the response
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  
+
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -102,7 +123,7 @@ function parseBrainResponse(raw: string): { reply: string; action: { type: strin
       // JSON parse failed, fallback
     }
   }
-  
+
   // LLM didn't return valid JSON — use raw text as reply, no action
   // Strip code fences if they exist
   const cleanReply = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
@@ -143,20 +164,24 @@ export function createBot(): TelegramBot {
       // Load persistent conversation history
       const history = await getConversationHistory(userId);
 
-      // Load live context from DB
-      const [habits, tasks, reminders, recentDecisions] = await Promise.all([
+      // Load live context from DB (incl. the agent's self-model)
+      const [habits, tasks, reminders, recentDecisions, self, recentReflections] = await Promise.all([
         getAllHabits(),
         getPendingTasks(),
         getPendingReminders(),
         getRecentDecisions(5),
+        getSelfState(),
+        getRecentReflections(3),
       ]);
 
-      // Build the brain prompt
+      // Build the brain prompt (self-model shapes the agent's self-awareness)
       const messages = buildBrainPrompt(text, history, {
         habits: habits.map(h => ({ name: h.name, streak: h.streak, lastCompleted: h.lastCompleted ?? null })),
         tasks: tasks.map(t => ({ description: t.description, timesDeferred: t.timesDeferred })),
         reminders: reminders.map(r => ({ text: r.text, scheduledTime: r.scheduledTime })),
         recentDecisions: recentDecisions.map(d => ({ question: d.question, createdAt: d.createdAt })),
+        self,
+        recentReflections: recentReflections.map(r => ({ reflection: r.reflection, theme: r.theme, createdAt: r.createdAt })),
       });
 
       // Get LLM response
@@ -176,8 +201,8 @@ export function createBot(): TelegramBot {
       await appendMessage(userId, 'user', text);
       await appendMessage(userId, 'assistant', reply);
 
-      // Send reply
-      await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
+      // Send reply (HTML-safe so stray markdown never breaks the message)
+      await bot.sendMessage(msg.chat.id, toTelegramHtml(reply), { parse_mode: 'HTML' });
 
     } catch (err: any) {
       console.error('Brain error:', err);
@@ -192,7 +217,7 @@ export function createBot(): TelegramBot {
           errMsg += '\n' + cause.errors.map((e: any) => e?.message || String(e)).join('\n');
         }
       }
-      await bot.sendMessage(msg.chat.id, `Something broke on my end. Try again.\n\nError details:\n\`\`\`\n${errMsg}\n\`\`\``, { parse_mode: 'Markdown' });
+      await bot.sendMessage(msg.chat.id, `Something broke on my end. Try again.\n\nError details:\n${toTelegramHtml(errMsg)}`, { parse_mode: 'HTML' });
     }
   });
 

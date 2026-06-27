@@ -10,7 +10,7 @@ async function testGroq() {
       max_tokens: 10
     });
     console.log('Groq Success:', res.choices[0].message.content);
-  } catch (e) {
+  } catch (e: any) {
     console.log('Groq Error:', e.message);
   }
 }
@@ -19,12 +19,12 @@ async function testOpenRouter() {
   try {
     const openrouter = new OpenAI({ apiKey: config.llm.openrouterApiKey, baseURL: 'https://openrouter.ai/api/v1' });
     const res = await openrouter.chat.completions.create({
-      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      model: 'google/gemma-2-9b-it:free',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 10
     });
     console.log('OpenRouter Success:', res.choices[0].message.content);
-  } catch (e) {
+  } catch (e: any) {
     console.log('OpenRouter Error:', e.message);
   }
 }
@@ -38,7 +38,7 @@ async function testGemini() {
       max_tokens: 10
     });
     console.log('Gemini Success:', res.choices[0].message.content);
-  } catch (e) {
+  } catch (e: any) {
     console.log('Gemini Error:', e.message);
   }
 }

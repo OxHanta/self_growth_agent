@@ -89,3 +89,27 @@ export const conversationMessages = pgTable('conversation_messages', {
   content: text('content').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// ── Agent Self-Model (single row, id=1) ───────────────────────────────────────
+// The agent's living sense of self: who it is, its traits, its beliefs about the
+// user, and what it's currently focused on. Evolves via the nightly reflection loop.
+export const selfState = pgTable('self_state', {
+  id: integer('id').primaryKey().default(1),
+  name: varchar('name', { length: 50 }).notNull().default('Better'),
+  identity: text('identity').notNull(), // who I am, in my own words
+  traits: text('traits').notNull().default('[]'), // JSON array of self-observed tendencies
+  beliefsAboutUser: text('beliefs_about_user').notNull().default('[]'), // JSON array of observations about the user
+  currentFocus: text('current_focus'), // what I'm currently focused on for the user
+  growthNote: text('growth_note'), // a self-aware note about how I should improve
+  lastReflectionAt: timestamp('last_reflection_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ── Self-Reflection Journal (append-only) ──────────────────────────────────────
+export const selfReflections = pgTable('self_reflections', {
+  id: serial('id').primaryKey(),
+  reflection: text('reflection').notNull(),
+  theme: varchar('theme', { length: 30 }).notNull().default('general'), // self | user_patterns | relationship | progress
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});

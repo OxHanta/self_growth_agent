@@ -28,6 +28,7 @@ export const config = {
     afternoon: process.env.CRON_AFTERNOON ?? '0 13 * * *',
     night: process.env.CRON_NIGHT ?? '0 21 * * *',
     habitCheckin: process.env.CRON_HABIT_CHECKIN ?? '0 20 * * *',
+    selfReflection: process.env.CRON_SELF_REFLECTION ?? '0 22 * * *',
   },
   sheets: {
     budgetId: process.env.SHEET_BUDGET_ID ?? '',
