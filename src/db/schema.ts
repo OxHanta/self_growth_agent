@@ -126,3 +126,18 @@ export const selfReflections = pgTable('self_reflections', {
   theme: varchar('theme', { length: 30 }).notNull().default('general'), // self | user_patterns | relationship | progress
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// ── User Profiles (onboarding — learned, never hardcoded) ─────────────────────
+// The agent learns who the user is through conversation. No assumptions baked in.
+export const userProfiles = pgTable('user_profiles', {
+  id: serial('id').primaryKey(),
+  userId: bigint('user_id', { mode: 'number' }).notNull().unique(),
+  name: varchar('name', { length: 100 }), // what to call them — learned, never assumed
+  onboarded: boolean('onboarded').notNull().default(false),
+  goals: text('goals').notNull().default('[]'), // JSON array of their goals
+  focusAreas: text('focus_areas').notNull().default('[]'), // JSON array (financial, health, etc.)
+  contextNotes: text('context_notes'), // free-form notes the agent picked up
+  onboardedAt: timestamp('onboarded_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

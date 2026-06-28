@@ -7,6 +7,7 @@ import {
   ExerciseDifficulty,
 } from '../llm/prompts';
 import { logExerciseSent, getRecentExercises, ExerciseRecord } from '../db/queries/exercises';
+import { isOnboarded } from '../db/queries/profiles';
 import { config } from '../config';
 
 const ALL_TYPES: ExerciseType[] = ['cognitive', 'physical', 'reflective'];
@@ -105,6 +106,12 @@ async function generateVerified(
 
 export async function sendMentalExercise(bot: TelegramBot) {
   const chatId = config.telegram.userId;
+
+  // Don't send exercises before the user has been onboarded.
+  if (!(await isOnboarded(chatId))) {
+    console.log('[exercise] User not onboarded yet — skipping.');
+    return;
+  }
 
   try {
     const recent = await getRecentExercises(30);

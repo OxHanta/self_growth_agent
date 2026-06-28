@@ -9,18 +9,18 @@ const groq = config.llm.groqApiKey
 // ── OpenRouter client ─────────────────────────────────────────────────────────
 const openrouter = config.llm.openrouterApiKey
   ? new OpenAI({
-      apiKey: config.llm.openrouterApiKey,
-      baseURL: 'https://openrouter.ai/api/v1',
-      defaultHeaders: { 'HTTP-Referer': 'personal-growth-agent', 'X-Title': 'Mill Growth Agent' },
-    })
+    apiKey: config.llm.openrouterApiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: { 'HTTP-Referer': 'personal-growth-agent', 'X-Title': 'Personal Growth Agent' },
+  })
   : null;
 
 // ── Gemini via OpenAI-compat endpoint ─────────────────────────────────────────
 const gemini = config.llm.geminiApiKey
   ? new OpenAI({
-      apiKey: config.llm.geminiApiKey,
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-    })
+    apiKey: config.llm.geminiApiKey,
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+  })
   : null;
 
 export interface ChatMessage {

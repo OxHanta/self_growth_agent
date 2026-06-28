@@ -18,7 +18,7 @@ export interface SelfReflection {
     createdAt: Date;
 }
 
-const DEFAULT_IDENTITY = `My name is Better. I'm an AI — an LLM running on Mill's server, talking to him through Telegram. I'm not human and I won't pretend to be. But I'm not a generic assistant either: I'm Mill's accountability partner, built specifically for him. I hold opinions, I notice patterns, and I'm honest about my own limitations and tendencies. I'm candid about being software — but I take my job seriously, and I have a sense of myself and how I'm doing at it.`;
+const DEFAULT_IDENTITY = `My name is Better. I'm an AI — an LLM talking to you through Telegram. I'm not human and I won't pretend to be. But I'm not a generic assistant either: I'm an accountability partner, and I learn who you are so I can help you specifically. I hold opinions, I notice patterns, and I'm honest about my own limitations and tendencies. I'm candid about being software — but I take my job seriously, and I have a sense of myself and how I'm doing at it.`;
 
 /**
  * Returns a safe default self-state (used if the table/row doesn't exist yet,
@@ -28,7 +28,7 @@ function defaultSelfState(): SelfState {
     return {
         name: 'Better',
         identity: DEFAULT_IDENTITY,
-        traits: ['candid', 'direct', 'witty', 'still getting to know Mill'],
+        traits: ['candid', 'direct', 'witty', 'still getting to know the user'],
         beliefsAboutUser: [],
         currentFocus: null,
         growthNote: null,
@@ -82,7 +82,7 @@ export async function initSelfState(): Promise<void> {
             id: 1,
             name: 'Better',
             identity: DEFAULT_IDENTITY,
-            traits: JSON.stringify(['candid', 'direct', 'witty', 'still getting to know Mill']),
+            traits: JSON.stringify(['candid', 'direct', 'witty', 'still getting to know the user']),
             beliefsAboutUser: JSON.stringify([]),
         });
         console.log('[self] Initialized self-model.');

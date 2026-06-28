@@ -12,10 +12,13 @@ import { logDecision, getRecentDecisions } from '../db/queries/decisions';
 import { getConversationHistory, appendMessage } from '../db/queries/conversations';
 import { getSelfState, initSelfState, getRecentReflections } from '../db/queries/self';
 import { getActivePreferences, setPreference, removePreference } from '../db/queries/preferences';
+import { getProfile, ensureProfile, updateProfile, markOnboarded } from '../db/queries/profiles';
+import { resetAllData } from '../db/queries/reset';
 
 // ── Action executor ────────────────────────────────────────────────────────────
 async function executeAction(
-  action: { type: string; data: Record<string, unknown> }
+  action: { type: string; data: Record<string, unknown> },
+  userId: number
 ): Promise<void> {
   switch (action.type) {
     case 'HABIT_LOG': {
@@ -99,6 +102,31 @@ async function executeAction(
       break;
     }
 
+    case 'UPDATE_PROFILE': {
+      const fields: Parameters<typeof updateProfile>[1] = {};
+      if (typeof action.data.name === 'string') fields.name = String(action.data.name);
+      if (Array.isArray(action.data.goals)) {
+        fields.goals = (action.data.goals as unknown[]).map(String).filter(Boolean);
+      }
+      if (Array.isArray(action.data.focus_areas)) {
+        fields.focusAreas = (action.data.focus_areas as unknown[]).map(String).filter(Boolean);
+      }
+      if (typeof action.data.context_notes === 'string') {
+        const note = String(action.data.context_notes).trim();
+        if (note) fields.contextNotes = note;
+      }
+      if (Object.keys(fields).length > 0) {
+        await updateProfile(userId, fields);
+        console.log(`[Profile] Updated for ${userId}:`, Object.keys(fields).join(', '));
+      }
+      break;
+    }
+
+    case 'ONBOARDING_COMPLETE': {
+      await markOnboarded(userId);
+      break;
+    }
+
     default:
       break;
   }
@@ -176,15 +204,31 @@ export function createBot(): TelegramBot {
     }
 
     const text = msg.text.trim();
+
+    // /reset — full factory reset (wipes everything, re-onboards next message)
+    if (text === '/reset' || text.toLowerCase() === '/forget') {
+      await resetAllData();
+      await initSelfState(); // re-seed the default self-model for a fresh agent
+      await bot.sendMessage(
+        msg.chat.id,
+        `Done. I've wiped everything — memory, identity, your profile, habits, tasks, the lot. Fresh slate.\n\nSay hi and introduce yourself; I'll get to know you from scratch.`
+      );
+      return;
+    }
+
     console.log(`[${new Date().toISOString()}] Message from user ${userId}: ${text}`);
 
     try {
       await bot.sendChatAction(msg.chat.id, 'typing');
 
+      // Ensure a profile row exists (first message creates it → triggers onboarding)
+      const profile = await ensureProfile(userId);
+      const onboarding = !profile.onboarded;
+
       // Load persistent conversation history
       const history = await getConversationHistory(userId);
 
-      // Load live context from DB (incl. the agent's self-model + saved preferences)
+      // Load live context from DB (incl. the agent's self-model + saved preferences + profile)
       const [habits, tasks, reminders, recentDecisions, self, recentReflections, preferences] = await Promise.all([
         getAllHabits(),
         getPendingTasks(),
@@ -195,7 +239,7 @@ export function createBot(): TelegramBot {
         getActivePreferences(),
       ]);
 
-      // Build the brain prompt (self-model + preferences shape the agent's behavior)
+      // Build the brain prompt (profile + self-model + preferences shape behavior)
       const messages = buildBrainPrompt(text, history, {
         habits: habits.map(h => ({ name: h.name, streak: h.streak, lastCompleted: h.lastCompleted ?? null })),
         tasks: tasks.map(t => ({ description: t.description, timesDeferred: t.timesDeferred })),
@@ -204,6 +248,8 @@ export function createBot(): TelegramBot {
         self,
         recentReflections: recentReflections.map(r => ({ reflection: r.reflection, theme: r.theme, createdAt: r.createdAt })),
         preferences: preferences.map(p => ({ key: p.key, rule: p.rule })),
+        profile,
+        onboarding,
       });
 
       // Get LLM response
@@ -215,7 +261,7 @@ export function createBot(): TelegramBot {
 
       // Execute any DB action silently
       if (action.type !== 'NONE') {
-        await executeAction(action);
+        await executeAction(action, userId);
         console.log(`[Action executed]: ${action.type}`, action.data);
       }
 
