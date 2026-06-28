@@ -13,7 +13,6 @@ import { getConversationHistory, appendMessage } from '../db/queries/conversatio
 import { getSelfState, initSelfState, getRecentReflections } from '../db/queries/self';
 import { getActivePreferences, setPreference, removePreference } from '../db/queries/preferences';
 import { getProfile, ensureProfile, updateProfile, markOnboarded } from '../db/queries/profiles';
-import { resetAllData } from '../db/queries/reset';
 
 // ── Action executor ────────────────────────────────────────────────────────────
 async function executeAction(
@@ -204,18 +203,6 @@ export function createBot(): TelegramBot {
     }
 
     const text = msg.text.trim();
-
-    // /reset — full factory reset (wipes everything, re-onboards next message)
-    if (text === '/reset' || text.toLowerCase() === '/forget') {
-      await resetAllData();
-      await initSelfState(); // re-seed the default self-model for a fresh agent
-      await bot.sendMessage(
-        msg.chat.id,
-        `Done. I've wiped everything — memory, identity, your profile, habits, tasks, the lot. Fresh slate.\n\nSay hi and introduce yourself; I'll get to know you from scratch.`
-      );
-      return;
-    }
-
     console.log(`[${new Date().toISOString()}] Message from user ${userId}: ${text}`);
 
     try {
